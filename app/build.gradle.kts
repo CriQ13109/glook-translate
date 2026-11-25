@@ -1,3 +1,4 @@
+import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     // AGP 9.x 는 Kotlin 지원이 내장되어 있어 org.jetbrains.kotlin.android 플러그인을 별도로 적용하지 않습니다.
@@ -28,8 +29,17 @@ android {
         release {
             isMinifyEnabled = !project.hasProperty("noMinify")
             isShrinkResources = false
-            // 사이드로드용: 디버그 키로 서명(Play 배포용 아님). 설치된 디버그 빌드 위에 그대로 덮어 설치 가능.
-            signingConfig = signingConfigs.getByName("debug")
+            // -PglookSigning=<release-signing.properties 경로> 를 주면 릴리스 키로, 없으면 디버그 키(사이드로드 전용)로 서명.
+            val signingFile = project.findProperty("glookSigning")?.toString()?.let { file(it) }
+            signingConfig = if (signingFile != null && signingFile.exists()) {
+                val props = Properties().apply { signingFile.inputStream().use { load(it) } }
+                signingConfigs.create("glookRelease") {
+                    storeFile = File(signingFile.parentFile, props.getProperty("storeFile"))
+                    storePassword = props.getProperty("storePassword")
+                    keyAlias = props.getProperty("alias")
+                    keyPassword = props.getProperty("keyPassword")
+                }
+            } else signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
